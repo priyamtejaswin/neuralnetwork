@@ -10,28 +10,42 @@ def onehot(x, n=10):
 		row[val] = 1.
 	return z
 
+def tanh(x):
+	"""Tanh activation."""
+	return np.tanh(x)
+
+def tanh_deriv(x):
+	return (1.0 - np.tanh(x)**2)
+
 def sigmoid(x):
 	"""Sigmoid activation."""
-	return 1.0/(1.0+np.exp(-x))
+	return 1.0/(1.0 + np.exp(-x))
 
 def sigmoid_deriv(x):
-	"""Sigmoid activation derivative."""
-	return sigmoid(x) * (1-sigmoid(x))
+	"""Sigmoid derivative."""
+	return sigmoid(x) * (1 - sigmoid(x))
 
-class QuadraticError(object):
+class QuadraticCost(object):
 	"""Creates a quadratic error object.
 	Contains a object.value function and object.deriv function."""
 	def value(self, a, y):
-		"""QuadraticError cost value."""
+		"""QuadraticCost cost value."""
 		return np.mean(0.5*np.sum((a-y)**2, axis=0))
 
-	def deriv(self, z, a, y):
-		"""QuadraticError cost derivative."""
-		return (a-y) * sigmoid_deriv(z)
+	def deriv(self, z, a, y, nonlin_deriv):
+		"""QuadraticCost cost derivative."""
+		return (a-y) * nonlin_deriv(z)
 
 class NeuralNetwork(object):
 	"""Creates a artificial neural network object."""
-	def __init__(self, layers, batch_size=2):
+	def __init__(self, layers, batch_size=2, cost=QuadraticCost(), nonlin="sigmoid"):
+		if nonlin=="sigmoid":
+			self.nonlin = sigmoid
+			self.nonlin_deriv = sigmoid_deriv
+		elif nonlin=="tanh":
+			self.nonlin = tanh
+			self.nonlin_deriv = tanh_deriv
+		self.cost = cost
 		self.batch_size = batch_size
 		self.layers = layers
 		self.weights = [np.random.randn(j, i) for i,j in zip(layers[:-1], layers[1:])]
@@ -52,17 +66,17 @@ class NeuralNetwork(object):
 		activations, weighted_inputs = [a], []
 		for w, b in zip(self.weights, self.biases):
 			z = np.dot(w, a) + b
-			a = sigmoid(z)
+			a = self.nonlin(z)
 			activations.append(a)
 			weighted_inputs.append(a)
 		return activations, weighted_inputs
 
-	def backprop(self, output_activation, weighted_inputs, target, cost):
+	def backprop(self, output_activation, weighted_inputs, target):
 		"""Backpropagates the error from the output layer to all hidden layers."""
-		del_out = cost.deriv(weighted_inputs[-1], output_activation, target)
+		del_out = self.cost.deriv(weighted_inputs[-1], output_activation, target, self.nonlin_deriv)
 		del_array = [del_out]
 		for w, z in zip(self.weights[::-1], weighted_inputs[-2::-1]):
-			del_array.append(np.dot(w.T, del_array[-1]) * sigmoid_deriv(z))
+			del_array.append(np.dot(w.T, del_array[-1]) * self.nonlin_deriv(z))
 		return del_array
 
 	def update_params(self, del_array, activations):
@@ -71,7 +85,7 @@ class NeuralNetwork(object):
 			w -= self.alpha * np.dot(del_val, a.T)
 			b -= self.alpha * del_val
 
-	def sgd(self, trX, trY, teX=None, teY=None, epochs=500, alpha=0.05, cost=QuadraticError()):
+	def sgd(self, trX, trY, teX=None, teY=None, epochs=500, alpha=0.05):
 		"""Performs stochastic gradient descent for a given bactch size.
 		This method also takes a cost object for calculating cost and cost derivative."""
 		self.epochs, self.alpha = epochs, alpha
@@ -83,11 +97,11 @@ class NeuralNetwork(object):
 		for _i_ in xrange(epochs+1):
 			for i,j in zip(start, stop):
 				activations, weighted_inputs = self.feedforward(trX[i:j, :].T)
-				del_array = self.backprop(activations[-1], weighted_inputs, trY[:, i:j], cost)
+				del_array = self.backprop(activations[-1], weighted_inputs, trY[:, i:j])
 				self.update_params(del_array, activations)
 
 			if _i_%100==0:
-				print "epoch:", _i_, "error:", cost.value(activations[-1], trY[:, i:j])
+				print "epoch:", _i_, "error:", self.cost.value(activations[-1], trY[:, i:j])
 				self.evaluate(teX, teY)
 
 	def evaluate(self, teX, teY):
@@ -117,9 +131,27 @@ def test_iris():
 	print "train data:", trX.shape, trY.shape
 	print "test data:", teX.shape, teY.shape
 
-	nn = NeuralNetwork([4, 100, 100, 3], batch_size=10)
+	nn = NeuralNetwork([4, 50, 50, 3], batch_size=10)
 	nn.properties()
 	nn.sgd(trX, trY, teX, teY, epochs=1500, alpha=0.05)
+
+def test_digits():
+	digits = datasets.load_digits()
+	print "digits data shape:", digits.data.shape
+	print "digits target shape:", digits.target.shape
+
+	data = np.concatenate((digits.data, onehot(digits.target, 10)), axis=1)
+	np.random.shuffle(data)
+
+	X,Y = data[:, :64]/np.max(data), data[:, 64:]
+	trX, trY = X[:1500, :], Y[:1500, :].T
+	teX, teY = X[1500:, :], Y[1500:, :].T
+	print "train data:", trX.shape, trY.shape
+	print "test data:", teX.shape, teY.shape
+
+	nn = NeuralNetwork([64, 100, 100, 10], batch_size=10, nonlin="tanh")
+	nn.properties()
+	nn.sgd(trX, trY, teX, teY, epochs=1000, alpha=0.025)
 
 if __name__ == '__main__':
 	# training data
@@ -130,4 +162,4 @@ if __name__ == '__main__':
 	# 	[1, 1, 1]
 	# 	])
 	# y = np.array([[0, 1, 1, 0]])
-	test_iris()
+	test_digits()
