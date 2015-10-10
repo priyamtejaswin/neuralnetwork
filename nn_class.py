@@ -1,6 +1,7 @@
 import numpy as np
 import sys
 from pprint import pprint
+from sklearn import datasets
 
 def onehot(x, n=10):
 	"""Returns target values in onehot format."""
@@ -18,12 +19,11 @@ def sigmoid_deriv(x):
 	return sigmoid(x) * (1-sigmoid(x))
 
 class QuadraticError(object):
-	"""Creates a quadratic error object - i will try to model all error metrics as classes.
-	This will allow expansion for better stuff like log-likelihood and cross-entropy.
+	"""Creates a quadratic error object.
 	Contains a object.value function and object.deriv function."""
 	def value(self, a, y):
 		"""QuadraticError cost value."""
-		return 0.5*np.linalg.norm(a-y)**2
+		return np.mean(0.5*np.sum((a-y)**2, axis=0))
 
 	def deriv(self, z, a, y):
 		"""QuadraticError cost derivative."""
@@ -58,7 +58,7 @@ class NeuralNetwork(object):
 		return activations, weighted_inputs
 
 	def backprop(self, output_activation, weighted_inputs, target, cost):
-		"""Backpropagates the error from the output layer to al hidden layers.""" 
+		"""Backpropagates the error from the output layer to all hidden layers."""
 		del_out = cost.deriv(weighted_inputs[-1], output_activation, target)
 		del_array = [del_out]
 		for w, z in zip(self.weights[::-1], weighted_inputs[-2::-1]):
@@ -75,33 +75,51 @@ class NeuralNetwork(object):
 		"""Performs stochastic gradient descent for a given bactch size.
 		This method also takes a cost object for calculating cost and cost derivative."""
 		self.epochs, self.alpha = epochs, alpha
-		print "\ntraining...\n"
 		mi_trX = trX.shape[0] - trX.shape[0]%self.batch_size
+		start = xrange(0, mi_trX, self.batch_size)
+		stop = xrange(self.batch_size, mi_trX+1, self.batch_size)
+
+		print "\ntraining...\n"
 		for _i_ in xrange(epochs+1):
-			for i,j in zip(range(0, mi_trX, self.batch_size), range(self.batch_size, mi_trX+1, self.batch_size)):
+			for i,j in zip(start, stop):
 				activations, weighted_inputs = self.feedforward(trX[i:j, :].T)
 				del_array = self.backprop(activations[-1], weighted_inputs, trY[:, i:j], cost)
 				self.update_params(del_array, activations)
 
 			if _i_%100==0:
-				if teX.all():
-					print "epoch:", _i_
-					self.evaluate(teX, teY)
-				else:
-					print "\nepoch:", _i_
-					print "network\ttarget"
-					for col1,col2 in zip(activations[-1].T, trY[:, i:j].T):
-						print np.argmax(col1) , "\t", np.argmax(col2)
-					raw_input('---')
+				print "epoch:", _i_, "error:", cost.value(activations[-1], trY[:, i:j])
+				self.evaluate(teX, teY)
 
 	def evaluate(self, teX, teY):
 		"""Uses the feedforward method to calculate model accuracy on testing data."""
 		mi_teX = teX.shape[0] - teX.shape[0]%self.batch_size
 		means_array = []
-		for i,j in zip(range(0, mi_teX, self.batch_size), range(self.batch_size, mi_teX+1, self.batch_size)):
+		start = xrange(0, mi_teX, self.batch_size)
+		stop = xrange(self.batch_size, mi_teX+1, self.batch_size)
+		for i,j in zip(start, stop):
 			activations, _ = self.feedforward(teX[i:j, :].T)
 			means_array.append(np.mean(np.argmax(activations[-1], axis=0)==np.argmax(teY[:, i:j], axis=0)))
 		print "accuracy:", np.mean(means_array), "\n---"
+
+## ann code ends here - below are helper functions for testing the model on datasets
+
+def test_iris():
+	iris = datasets.load_iris()
+	print "iris data shape:", iris.data.shape
+	print "iris target shape:", iris.target.shape
+
+	data = np.concatenate((iris.data, onehot(iris.target, 3)), axis=1)
+	np.random.shuffle(data)
+
+	X,Y = data[:, :4]/np.max(data), data[:, 4:]
+	trX, trY = X[:100, :], Y[:100, :].T
+	teX, teY = X[100:, :], Y[100:, :].T
+	print "train data:", trX.shape, trY.shape
+	print "test data:", teX.shape, teY.shape
+
+	nn = NeuralNetwork([4, 100, 100, 3], batch_size=10)
+	nn.properties()
+	nn.sgd(trX, trY, teX, teY, epochs=1500, alpha=0.05)
 
 if __name__ == '__main__':
 	# training data
@@ -112,21 +130,4 @@ if __name__ == '__main__':
 	# 	[1, 1, 1]
 	# 	])
 	# y = np.array([[0, 1, 1, 0]])
-
-	from sklearn import datasets
-	iris = datasets.load_iris()
-	print "iris data shape:", iris.data.shape
-	print "iris target shape:", iris.target.shape
-
-	data = np.concatenate((iris.data, onehot(iris.target, 3)), axis=1)
-	np.random.shuffle(data)
-	# sys.exit()
-	X,Y = data[:, :4]/np.max(data), data[:, 4:]
-	trX, trY = X[:100, :], Y[:100, :].T
-	teX, teY = X[100:, :], Y[100:, :].T
-	print "train data:", trX.shape, trY.shape
-	print "test data:", teX.shape, teY.shape
-
-	nn = NeuralNetwork([4, 50, 50, 3], batch_size=10)
-	nn.properties()
-	nn.sgd(trX, trY, teX, teY, epochs=1000)
+	test_iris()
