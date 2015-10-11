@@ -10,11 +10,18 @@ def onehot(x, n=10):
 		row[val] = 1.
 	return z
 
+def softmax(x):
+	"""Returns softmax probability distribution."""
+	e_x = np.exp(x - np.max(x, axis=0))
+	out = e_x / np.sum(e_x, axis=0)
+	return out
+
 def tanh(x):
 	"""Tanh activation."""
 	return np.tanh(x)
 
 def tanh_deriv(x):
+	"""Tanh activation derivative."""
 	return (1.0 - np.tanh(x)**2)
 
 def sigmoid(x):
@@ -25,8 +32,17 @@ def sigmoid_deriv(x):
 	"""Sigmoid derivative."""
 	return sigmoid(x) * (1 - sigmoid(x))
 
+class CrossEntropyCost(object):
+	"""Creates a CrossEntropy cost object.
+	Contains a object.value and object.deriv function."""
+	def value(self, a, y):
+		return np.mean(np.sum(np.nan_to_num(-y*np.log(a)-(1-y)*np.log(1-a)), axis=0))
+
+	def deriv(self, z, a, y, nonlin_deriv):
+		return (a-y)
+
 class QuadraticCost(object):
-	"""Creates a quadratic error object.
+	"""Creates a quadratic cost object.
 	Contains a object.value function and object.deriv function."""
 	def value(self, a, y):
 		"""QuadraticCost cost value."""
@@ -38,13 +54,14 @@ class QuadraticCost(object):
 
 class NeuralNetwork(object):
 	"""Creates a artificial neural network object."""
-	def __init__(self, layers, batch_size=2, cost=QuadraticCost(), nonlin="sigmoid"):
+	def __init__(self, layers, batch_size=2, cost=QuadraticCost(), nonlin="sigmoid", use_softmax=True):
 		if nonlin=="sigmoid":
 			self.nonlin = sigmoid
 			self.nonlin_deriv = sigmoid_deriv
 		elif nonlin=="tanh":
 			self.nonlin = tanh
 			self.nonlin_deriv = tanh_deriv
+		self.use_softmax = use_softmax
 		self.cost = cost
 		self.batch_size = batch_size
 		self.layers = layers
@@ -54,10 +71,14 @@ class NeuralNetwork(object):
 	def properties(self):
 		print "\n--network properties--\n"
 		table = [
-				["number of layers", len(self.layers)],
-				["input units", self.layers[0]],
-				["output units", self.layers[-1]],
-				["number of hidden units", self.layers[1:-1]]
+				["number of layers:", len(self.layers)],
+				["input units:", self.layers[0]],
+				["output units:", self.layers[-1]],
+				["number of hidden units", self.layers[1:-1]],
+				["batch size:", self.batch_size],
+				["softmax output:", self.use_softmax],
+				["cost:", self.cost],
+				["non-linearity:", self.nonlin]
 				]
 		pprint(table)
 
@@ -69,6 +90,8 @@ class NeuralNetwork(object):
 			a = self.nonlin(z)
 			activations.append(a)
 			weighted_inputs.append(a)
+		if self.use_softmax:
+			activations[-1] = softmax(weighted_inputs[-1])
 		return activations, weighted_inputs
 
 	def backprop(self, output_activation, weighted_inputs, target):
@@ -100,7 +123,7 @@ class NeuralNetwork(object):
 				del_array = self.backprop(activations[-1], weighted_inputs, trY[:, i:j])
 				self.update_params(del_array, activations)
 
-			if _i_%100==0:
+			if _i_%50==0:
 				print "epoch:", _i_, "error:", self.cost.value(activations[-1], trY[:, i:j])
 				self.evaluate(teX, teY)
 
@@ -149,7 +172,7 @@ def test_digits():
 	print "train data:", trX.shape, trY.shape
 	print "test data:", teX.shape, teY.shape
 
-	nn = NeuralNetwork([64, 100, 100, 10], batch_size=10, nonlin="tanh")
+	nn = NeuralNetwork([64, 100, 100, 10], batch_size=1, nonlin="tanh", cost=CrossEntropyCost(), use_softmax=False)
 	nn.properties()
 	nn.sgd(trX, trY, teX, teY, epochs=1000, alpha=0.025)
 
