@@ -12,7 +12,8 @@ def onehot(x, n=10):
 
 def softmax(x):
 	"""Returns softmax probability distribution."""
-	e_x = np.exp(x - np.max(x, axis=0))
+	## Not working correctly - the error calculation needs to be changed - come back later.
+	e_x = np.exp(x)
 	out = e_x / np.sum(e_x, axis=0)
 	return out
 
@@ -54,7 +55,7 @@ class QuadraticCost(object):
 
 class NeuralNetwork(object):
 	"""Creates a artificial neural network object."""
-	def __init__(self, layers, batch_size=2, cost=QuadraticCost(), nonlin="sigmoid", use_softmax=True):
+	def __init__(self, layers, batch_size=2, cost=QuadraticCost(), nonlin="sigmoid", use_softmax=False):
 		if nonlin=="sigmoid":
 			self.nonlin = sigmoid
 			self.nonlin_deriv = sigmoid_deriv
@@ -172,7 +173,7 @@ def test_digits():
 	print "train data:", trX.shape, trY.shape
 	print "test data:", teX.shape, teY.shape
 
-	nn = NeuralNetwork([64, 100, 100, 10], batch_size=1, nonlin="tanh", cost=CrossEntropyCost(), use_softmax=False)
+	nn = NeuralNetwork([64, 100, 100, 100, 10], batch_size=1, nonlin="tanh", cost=CrossEntropyCost(), use_softmax=False)
 	nn.properties()
 	nn.sgd(trX, trY, teX, teY, epochs=1000, alpha=0.025)
 
